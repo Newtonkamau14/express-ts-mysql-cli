@@ -30,12 +30,12 @@ Install packages
 If the script was made to an executable.
 
 ```bash
-  npx express-ts-mysql "project name"
+  npx express-ts-mysql init 
 ``` 
 If it was installed globally
 
 ```bash
-  express-ts-mysql "project name"
+  express-ts-mysql init
 ```  
 ## Uninstalling 
 ```bash
