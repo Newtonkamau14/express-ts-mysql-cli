@@ -45,6 +45,7 @@ program
         installDependencies(projectPath, packageManager);
 
         console.log(`Project ${projectName} initialized successfully.`);
+        console.log(`cd ${projectName}`)
       });
   });
 
@@ -129,20 +130,19 @@ function installDependencies(projectPath, packageManager) {
 }
 
 function getIndexTsContent() {
-  return `
-import dotenv from "dotenv";
+  return `import dotenv from "dotenv";
 dotenv.config({ path: \`.env.\${process.env.NODE_ENV}\` });
 import express, { Application, Request, Response } from "express";
-import { logger } from "./util/util";
-import { connectDb } from "./config/database"; 
+import { logger,normalizePort } from "./util/util";
+import { DatabaseConnection } from "./config/database"; 
 import router from './routes';
 
-const PORT = process.env.PORT || 3000;
+const PORT = normalizePort(process.env.PORT || '3000');
 const app: Application = express();
 
 // Middleware
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: false }));
 app.use(router);
 
 app.get('/', (req: Request, res: Response) => {
@@ -150,9 +150,10 @@ app.get('/', (req: Request, res: Response) => {
 });
 
 try {
+  const dbInstance = DatabaseConnection.getInstance();
   app.listen(PORT, () => {
     logger.info(\`Server is running at http://localhost:\${PORT}\`);
-    connectDb();
+    dbInstance.connectDb();
   });
 } catch (error) {
   if (error instanceof Error) {
@@ -165,8 +166,7 @@ export { app };
 }
 
 function getDatabaseTsContent() {
-  return `
-import { Sequelize } from "sequelize";
+  return `import { Sequelize } from "sequelize";
 import { logger } from "../util/util";
 
 const sequelize = new Sequelize(
@@ -182,22 +182,36 @@ const sequelize = new Sequelize(
   },
 );
 
-const connectDb = async () => {
-  try {
-    await sequelize.authenticate();
-    console.log("Connection has been established successfully.");
-  } catch (error) {
-    console.error("Unable to connect to the database:", error);
-  }
-};
+class DatabaseConnection {
+  private static instance: DatabaseConnection;
 
-export { sequelize, connectDb };
+  private constructor() {}
+
+  static getInstance() {
+    if (this.instance) {
+      return this.instance;
+    }
+    this.instance = new DatabaseConnection();
+    return this.instance;
+  }
+
+  async connectDb() {
+    try {
+      await sequelize.authenticate();
+      console.log("Connection has been established successfully.");
+    } catch (error) {
+      console.error("Unable to connect to the database:", error);
+    }
+  }
+}
+
+
+export { sequelize, DatabaseConnection };
 `;
 }
 
 function getRoutesIndexTsContent() {
-  return `
-import { Router } from "express";
+  return `import { Router } from "express";
 import userRouter from "./user.router";
 const router = Router();
 
@@ -208,13 +222,18 @@ export default router;
 }
 
 function getTsConfigContent() {
-  return `
-{
+  return `{
     "compilerOptions": {
         "target": "ES6",
         "module": "commonjs",
+        "experimentalDecorators": true,
+        "emitDecoratorMetadata": true,
         "strict": true,
+        "noImplicitAny": true, 
+        "strictPropertyInitialization": true,
+        "noEmitOnError": true,
         "esModuleInterop": true,
+        "forceConsistentCasingInFileNames": true, 
         "skipLibCheck": true,
         "outDir": "./dist",
         "rootDir": "./src"
@@ -228,27 +247,24 @@ function getTsConfigContent() {
 }
 
 function getEnvContent() {
-  return `
-PORT=3000  
+  return `PORT=3000  
 DATABASE_NAME=your_db_name
 DATABASE_USER=your_db_user
 DATABASE_PASSWORD=your_db_password
-DATABASE_HOST=localhost
+DATABASE_HOST='127.0.0.1'
 `;
 }
 
 function getGitIgnoreContent() {
-  return `
-node_modules
+  return `node_modules
 dist  
-.env
+.env.development
 app.log
 `;
 }
 
 function getNodemonContent() {
-  return `
-{
+  return `{
     "watch": [
       "src",
       ".env"
@@ -264,8 +280,7 @@ function getNodemonContent() {
 }
 
 function getUtilContent() {
-  return `
-import { createLogger, transports, format } from "winston";
+  return `import { createLogger, transports, format } from "winston";
 
 const customFormat = format.combine(
   format.timestamp({ format: "DD-MMM-YYYY HH:mm:ss" }),
@@ -282,13 +297,30 @@ const logger = createLogger({
   ],
 });
 
-export { logger };
+
+// Normalize a port into a number, string, or false.
+function normalizePort(val: string | number): number | string | false {
+  const port = parseInt(val as string, 10);
+
+  if (isNaN(port)) {
+    // named pipe
+    return val;
+  }
+
+  if (port >= 0) {
+    // port number
+    return port;
+  }
+
+  return false;
+}
+
+export { logger, normalizePort };
 `;
 }
 
 function getUserModelContent() {
-  return `
-import { Model, DataTypes, Optional } from "sequelize";
+  return `import { Model, DataTypes, Optional } from "sequelize";
 import { sequelize } from "../config/database";
 
 interface UserAttributes {
@@ -357,8 +389,7 @@ export { User };
 }
 
 function getUserControllerContent() {
-  return `
-import { Request, RequestHandler, Response } from "express";
+  return `import { Request, RequestHandler, Response } from "express";
 import { User } from "../models/user";
 import { logger } from "../util/util";
 
@@ -384,8 +415,7 @@ export default { getAllUsers };
 }
 
 function getUserRouterContent() {
-  return `
-import { Router } from "express";
+  return `import { Router } from "express";
 import userController from "../controllers/user.controller"; 
 const router = Router();
 
@@ -396,12 +426,13 @@ export default router;
 }
 
 function getTypeDefinitionsContent() {
-  return `
+  return `import { Request } from "express";
+
 declare global {  
   namespace NodeJS {
     interface ProcessEnv {
       DATABASE_HOST: string;
-      DATABSE_USER: string;
+      DATABASE_USER: string;
       DATABASE_PASSWORD: string;
       DATABASE_NAME: string;
     }
