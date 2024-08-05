@@ -241,6 +241,7 @@ function getTsConfigContent() {
     "include": [
       "src"
     ],
+    "exclude": ["node_modules"],
     "files": ["global.d.ts"]
 }
 `;
